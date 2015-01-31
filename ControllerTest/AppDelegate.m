@@ -6,9 +6,9 @@
 //  Copyright (c) 2015 Scott Lembcke. All rights reserved.
 //
 
-#include <IOKit/hid/IOHIDLib.h>
-
 #import "AppDelegate.h"
+
+#import "CCController.h"
 
 @interface AppDelegate ()
 
@@ -16,74 +16,67 @@
 
 @implementation AppDelegate
 
-static void
-GamepadInput(void *context, IOReturn result, void *sender, IOHIDValueRef value)
+-(void)activateController:(GCController *)controller
 {
-	if(result == kIOReturnSuccess){
-		IOHIDElementRef element = IOHIDValueGetElement(value);
-		
-		uint32_t usagePage = IOHIDElementGetUsagePage(element);
-		uint32_t usage = IOHIDElementGetUsage(element);
-		
-		int intValue = (int)IOHIDValueGetIntegerValue(value);
-		float floatValue = IOHIDValueGetScaledValue(value, kIOHIDValueScaleTypeCalibrated);
-		
-		NSLog(@"usagePage: %02x, usage %02x, int: %d, float: %f", usagePage, usage, intValue, floatValue);
-	}
+	NSLog(@"Activating controller: %@", controller);
+	NSLog(@"	VendorName: %@", controller.vendorName);
+	
+//	controller.playerIndex = 0;
+	
+	controller.controllerPausedHandler = ^(GCController *controller){
+		NSLog(@"Pause button.");
+	};
+	
+	controller.extendedGamepad.buttonA.valueChangedHandler = ^(GCControllerButtonInput *button, float value, BOOL pressed){
+		NSLog(@"A button is %@.", pressed ? @"YES" : @"NO");
+	};
+	
+	controller.extendedGamepad.buttonB.valueChangedHandler = ^(GCControllerButtonInput *button, float value, BOOL pressed){
+		NSLog(@"B button is %@.", pressed ? @"YES" : @"NO");
+	};
+	
+	controller.extendedGamepad.buttonX.valueChangedHandler = ^(GCControllerButtonInput *button, float value, BOOL pressed){
+		NSLog(@"X button is %@.", pressed ? @"YES" : @"NO");
+	};
+	
+	controller.extendedGamepad.buttonY.valueChangedHandler = ^(GCControllerButtonInput *button, float value, BOOL pressed){
+		NSLog(@"Y button is %@.", pressed ? @"YES" : @"NO");
+	};
+	
+	controller.extendedGamepad.leftShoulder.valueChangedHandler = ^(GCControllerButtonInput *button, float value, BOOL pressed){
+		NSLog(@"Left shoulder is %@.", pressed ? @"YES" : @"NO");
+	};
+	
+	controller.extendedGamepad.rightShoulder.valueChangedHandler = ^(GCControllerButtonInput *button, float value, BOOL pressed){
+		NSLog(@"Right shoulder is %@.", pressed ? @"YES" : @"NO");
+	};
+	
+	controller.extendedGamepad.dpad.valueChangedHandler = ^(GCControllerDirectionPad *dpad, float xValue, float yValue){
+		NSLog(@"Dpad (%f, %f).", xValue, yValue);
+	};
+	
+	[[NSNotificationCenter defaultCenter] addObserverForName:GCControllerDidDisconnectNotification object:controller queue:nil
+		usingBlock:^(NSNotification *notification){
+			NSLog(@"Deactivating controller: %@", notification.object);
+		}
+	];
 }
 
-static void
-GamepadDisconnected(void *context, IOReturn result, void *sender)
-{
-	NSLog(@"Gamepad Disconnected.");
-}
-
-static void
-GamepadConnected(void *context, IOReturn result, void *sender, IOHIDDeviceRef device)
-{
-	if(result == kIOReturnSuccess){
-		// Register event/remove callbacks.for buttons and axes.
-		NSArray *matches = @[
-			@{@(kIOHIDElementUsagePageKey): @(kHIDPage_GenericDesktop)},
-			@{@(kIOHIDElementUsagePageKey): @(kHIDPage_Button)},
-		];
-		
-		IOHIDDeviceSetInputValueMatchingMultiple(device, (__bridge CFArrayRef)matches);
-		IOHIDDeviceRegisterInputValueCallback(device, GamepadInput, NULL);
-		
-		IOHIDDeviceRegisterRemovalCallback(device, GamepadDisconnected, NULL);
-
-		IOHIDDeviceScheduleWithRunLoop(device, CFRunLoopGetCurrent(), kCFRunLoopDefaultMode);
-	}
-}
 
 - (void)applicationDidFinishLaunching:(NSNotification *)aNotification {
-	IOHIDManagerRef hid = IOHIDManagerCreate(kCFAllocatorDefault, 0);
-
-	if (IOHIDManagerOpen(hid, kIOHIDOptionsTypeNone) != kIOReturnSuccess) {
-		abort();
+	NSArray *controllers = [CCController controllers];
+	NSLog(@"%d controllers found.", (int)controllers.count);
+	
+	for(CCController *controller in controllers){
+		[self activateController:controller];
 	}
 	
-	// Register to get callbacks for gampads being connected.
-	NSArray *matches = @[
-		@{@(kIOHIDDeviceUsagePageKey): @(kHIDPage_GenericDesktop), @(kIOHIDDeviceUsageKey): @(kHIDUsage_GD_GamePad)},
-		@{@(kIOHIDDeviceUsagePageKey): @(kHIDPage_GenericDesktop), @(kIOHIDDeviceUsageKey): @(kHIDUsage_GD_MultiAxisController)},
+	__weak typeof(self) _self = self;
+	[[NSNotificationCenter defaultCenter] addObserverForName:GCControllerDidConnectNotification object:nil queue:nil
+		usingBlock:^(NSNotification *notification){
+			[_self activateController:notification.object];
+		}
 	];
-	
-	IOHIDManagerSetDeviceMatchingMultiple(hid, (__bridge CFArrayRef)matches);
-	IOHIDManagerRegisterDeviceMatchingCallback(hid, GamepadConnected, NULL);
-	
-	// Pump the event loop to list all of the currently connected gamepads.
-	CFRunLoopRef loop = CFRunLoopGetCurrent();
-	NSString *mode = @"PollGamepads";
-	IOHIDManagerScheduleWithRunLoop(hid, loop, (__bridge CFStringRef)mode);
-	
-	while(CFRunLoopRunInMode((CFStringRef)mode, 0, TRUE) == kCFRunLoopRunHandledSource){}
-
-	IOHIDManagerUnscheduleFromRunLoop(hid, loop, (__bridge CFStringRef)mode);
-	
-	// Schedule the HID manager normally to get callbacks during runtime.
-	IOHIDManagerScheduleWithRunLoop(hid, loop, kCFRunLoopDefaultMode);
 }
 
 - (void)applicationWillTerminate:(NSNotification *)aNotification {
