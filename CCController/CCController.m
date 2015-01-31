@@ -11,6 +11,7 @@
 
 @synthesize controllerPausedHandler = _controllerPausedHandler;
 @synthesize vendorName = _vendorName;
+@synthesize playerIndex = _playerIndex;
 
 static IOHIDManagerRef HID_MANAGER = NULL;
 static NSMutableArray *CONTROLLERS = nil;
@@ -86,13 +87,13 @@ GetAxis(IOHIDDeviceRef device, int axis)
 	};
 	
 	NSArray *elements = CFBridgingRelease(IOHIDDeviceCopyMatchingElements(device, (__bridge CFDictionaryRef)match, 0));
-	if(elements.count == 1) NSLog(@"Warning. Oops, found too many axes?");
+	if(elements.count != 1) NSLog(@"Warning. Oops, didn't find exactly one axis?");
 	
 	return (__bridge IOHIDElementRef)elements[0];
 }
 
 static void
-SetupAxis(IOHIDElementRef element, int dmin, int dmax, float rmin, float rmax, int deadMin, int deadMax)
+SetupAxis(IOHIDElementRef element, int dmin, int dmax, float rmin, float rmax, int deadZone)
 {
 	IOHIDElementSetProperty(element, CFSTR(kIOHIDElementCalibrationMinKey), (__bridge CFTypeRef)@(rmin));
 	IOHIDElementSetProperty(element, CFSTR(kIOHIDElementCalibrationMaxKey), (__bridge CFTypeRef)@(rmax));
@@ -100,8 +101,10 @@ SetupAxis(IOHIDElementRef element, int dmin, int dmax, float rmin, float rmax, i
 	IOHIDElementSetProperty(element, CFSTR(kIOHIDElementCalibrationSaturationMinKey), (__bridge CFTypeRef)@(dmin));
 	IOHIDElementSetProperty(element, CFSTR(kIOHIDElementCalibrationSaturationMaxKey), (__bridge CFTypeRef)@(dmax));
 	
-	IOHIDElementSetProperty(element, CFSTR(kIOHIDElementCalibrationDeadZoneMinKey), (__bridge CFTypeRef)@(deadMin));
-	IOHIDElementSetProperty(element, CFSTR(kIOHIDElementCalibrationDeadZoneMaxKey), (__bridge CFTypeRef)@(deadMax));
+	if(deadZone){
+		IOHIDElementSetProperty(element, CFSTR(kIOHIDElementCalibrationDeadZoneMinKey), (__bridge CFTypeRef)@(127 - deadZone));
+		IOHIDElementSetProperty(element, CFSTR(kIOHIDElementCalibrationDeadZoneMaxKey), (__bridge CFTypeRef)@(127 + deadZone));
+	}
 	
 //	IOHIDElementSetProperty(element, CFSTR(kIOHIDElementCalibrationGranularityKey), (__bridge CFTypeRef)@(1.0/64.0));
 }
@@ -129,13 +132,13 @@ ControllerConnected(void *context, IOReturn result, void *sender, IOHIDDeviceRef
 				
 				const int deadZone = 10;
 				
-				SetupAxis(GetAxis(device, 0x30), 0, 255, -1.0,  1.0, 127 - deadZone, 127 + deadZone); // Left thumb x
-				SetupAxis(GetAxis(device, 0x31), 0, 255,  1.0, -1.0, 127 - deadZone, 127 + deadZone); // Left thumb y
-				SetupAxis(GetAxis(device, 0x32), 0, 255, -1.0,  1.0, 127 - deadZone, 127 + deadZone); // Right thumb x
-				SetupAxis(GetAxis(device, 0x35), 0, 255,  1.0, -1.0, 127 - deadZone, 127 + deadZone); // Right thumb y
+				SetupAxis(GetAxis(device, 0x30), 0, 255, -1.0,  1.0, deadZone); // Left thumb x
+				SetupAxis(GetAxis(device, 0x31), 0, 255,  1.0, -1.0, deadZone); // Left thumb y
+				SetupAxis(GetAxis(device, 0x32), 0, 255, -1.0,  1.0, deadZone); // Right thumb x
+				SetupAxis(GetAxis(device, 0x35), 0, 255,  1.0, -1.0, deadZone); // Right thumb y
 				
-				SetupAxis(GetAxis(device, 0x33), 0, 255,  0.0,  1.0, 0, deadZone); // Left trigger
-				SetupAxis(GetAxis(device, 0x34), 0, 255,  0.0,  1.0, 0, deadZone); // Right trigger
+				SetupAxis(GetAxis(device, 0x33), 0, 255,  0.0,  1.0, 0); // Left trigger
+				SetupAxis(GetAxis(device, 0x34), 0, 255,  0.0,  1.0, 0); // Right trigger
 			}
 		} else if(vid == 0x045E){ // Microsoft
 			if(pid == 0x028E || pid == 0x028F){ // 360 wired/wireless
@@ -186,6 +189,8 @@ ControllerInputGeneric(void *context, IOReturn result, void *sender, IOHIDValueR
 		int state = (int)IOHIDValueGetIntegerValue(value);
 		float analog = IOHIDValueGetScaledValue(value, kIOHIDValueScaleTypeCalibrated);
 		
+//		NSLog(@"usagePage: 0x%02X, usage 0x%02X, value: %d / %f", usagePage, usage, state, analog);
+		
 		if(usagePage == kHIDPage_Button){
 			switch(usage){
 				case 0x02: snapshot->buttonA = state; break;
@@ -222,8 +227,6 @@ ControllerInputGeneric(void *context, IOReturn result, void *sender, IOHIDValueR
 		}
 		
 		controller->_gamepad.snapshotData = NSDataFromGCExtendedGamepadSnapShotDataV100(snapshot);
-		
-//		NSLog(@"usagePage: 0x%02X, usage 0x%02X, value: %d / %f", usagePage, usage, state, analog);
 	}
 }
 

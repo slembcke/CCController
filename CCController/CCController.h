@@ -1,3 +1,4 @@
 #import <GameController/GCController.h>
 
-@interface CCController : GCController @end
+@interface CCController : GCController
+@end
