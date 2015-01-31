@@ -77,6 +77,35 @@ static NSMutableArray *CONTROLLERS = nil;
 	return self;
 }
 
+static IOHIDElementRef
+GetAxis(IOHIDDeviceRef device, int axis)
+{
+	NSDictionary *match = @{
+		@(kIOHIDElementUsagePageKey): @(kHIDPage_GenericDesktop),
+		@(kIOHIDElementUsageKey): @(axis),
+	};
+	
+	NSArray *elements = CFBridgingRelease(IOHIDDeviceCopyMatchingElements(device, (__bridge CFDictionaryRef)match, 0));
+	if(elements.count == 1) NSLog(@"Warning. Oops, found too many axes?");
+	
+	return (__bridge IOHIDElementRef)elements[0];
+}
+
+static void
+SetupAxis(IOHIDElementRef element, int dmin, int dmax, float rmin, float rmax, int deadMin, int deadMax)
+{
+	IOHIDElementSetProperty(element, CFSTR(kIOHIDElementCalibrationMinKey), (__bridge CFTypeRef)@(rmin));
+	IOHIDElementSetProperty(element, CFSTR(kIOHIDElementCalibrationMaxKey), (__bridge CFTypeRef)@(rmax));
+	
+	IOHIDElementSetProperty(element, CFSTR(kIOHIDElementCalibrationSaturationMinKey), (__bridge CFTypeRef)@(dmin));
+	IOHIDElementSetProperty(element, CFSTR(kIOHIDElementCalibrationSaturationMaxKey), (__bridge CFTypeRef)@(dmax));
+	
+	IOHIDElementSetProperty(element, CFSTR(kIOHIDElementCalibrationDeadZoneMinKey), (__bridge CFTypeRef)@(deadMin));
+	IOHIDElementSetProperty(element, CFSTR(kIOHIDElementCalibrationDeadZoneMaxKey), (__bridge CFTypeRef)@(deadMax));
+	
+//	IOHIDElementSetProperty(element, CFSTR(kIOHIDElementCalibrationGranularityKey), (__bridge CFTypeRef)@(1.0/64.0));
+}
+
 static void
 ControllerConnected(void *context, IOReturn result, void *sender, IOHIDDeviceRef device)
 {
@@ -97,6 +126,16 @@ ControllerConnected(void *context, IOReturn result, void *sender, IOHIDDeviceRef
 		if(vid == 0x054C){ // Sony
 			if(pid == 0x5C4){ // DualShock 4
 				NSLog(@"[CCController initWithDevice:] Sony Dualshock 4 detected.");
+				
+				const int deadZone = 10;
+				
+				SetupAxis(GetAxis(device, 0x30), 0, 255, -1.0,  1.0, 127 - deadZone, 127 + deadZone); // Left thumb x
+				SetupAxis(GetAxis(device, 0x31), 0, 255,  1.0, -1.0, 127 - deadZone, 127 + deadZone); // Left thumb y
+				SetupAxis(GetAxis(device, 0x32), 0, 255, -1.0,  1.0, 127 - deadZone, 127 + deadZone); // Right thumb x
+				SetupAxis(GetAxis(device, 0x35), 0, 255,  1.0, -1.0, 127 - deadZone, 127 + deadZone); // Right thumb y
+				
+				SetupAxis(GetAxis(device, 0x33), 0, 255,  0.0,  1.0, 0, deadZone); // Left trigger
+				SetupAxis(GetAxis(device, 0x34), 0, 255,  0.0,  1.0, 0, deadZone); // Right trigger
 			}
 		} else if(vid == 0x045E){ // Microsoft
 			if(pid == 0x028E || pid == 0x028F){ // 360 wired/wireless
@@ -143,7 +182,9 @@ ControllerInputGeneric(void *context, IOReturn result, void *sender, IOHIDValueR
 		
 		uint32_t usagePage = IOHIDElementGetUsagePage(element);
 		uint32_t usage = IOHIDElementGetUsage(element);
-		CFIndex state = IOHIDValueGetIntegerValue(value);
+		
+		int state = (int)IOHIDValueGetIntegerValue(value);
+		float analog = IOHIDValueGetScaledValue(value, kIOHIDValueScaleTypeCalibrated);
 		
 		if(usagePage == kHIDPage_Button){
 			switch(usage){
@@ -168,15 +209,21 @@ ControllerInputGeneric(void *context, IOReturn result, void *sender, IOHIDValueR
 					case  7: snapshot->dpadX = -1.0; snapshot->dpadY =  1.0; break;
 					default: snapshot->dpadX =  0.0; snapshot->dpadY =  0.0; break;
 				}
-			}
-			
-			switch(usage){
+			} else {
+				switch(usage){
+					case 0x30: snapshot->leftThumbstickX = analog; break;
+					case 0x31: snapshot->leftThumbstickY = analog; break;
+					case 0x32: snapshot->rightThumbstickX = analog; break;
+					case 0x35: snapshot->rightThumbstickY = analog; break;
+					case 0x33: snapshot->leftTrigger = analog; break;
+					case 0x34: snapshot->rightTrigger = analog; break;
+				}
 			}
 		}
 		
 		controller->_gamepad.snapshotData = NSDataFromGCExtendedGamepadSnapShotDataV100(snapshot);
 		
-		NSLog(@"usagePage: %02x, usage %02x, value: %d", usagePage, usage, (int)IOHIDValueGetIntegerValue(value));
+//		NSLog(@"usagePage: 0x%02X, usage 0x%02X, value: %d / %f", usagePage, usage, state, analog);
 	}
 }
 

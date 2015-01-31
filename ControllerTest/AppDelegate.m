@@ -52,7 +52,23 @@
 	};
 	
 	controller.extendedGamepad.dpad.valueChangedHandler = ^(GCControllerDirectionPad *dpad, float xValue, float yValue){
-		NSLog(@"Dpad (%f, %f).", xValue, yValue);
+		NSLog(@"Dpad is (%f, %f).", xValue, yValue);
+	};
+	
+	controller.extendedGamepad.leftThumbstick.valueChangedHandler = ^(GCControllerDirectionPad *dpad, float xValue, float yValue){
+		NSLog(@"Left thumbstick is (%f, %f).", xValue, yValue);
+	};
+	
+	controller.extendedGamepad.rightThumbstick.valueChangedHandler = ^(GCControllerDirectionPad *dpad, float xValue, float yValue){
+		NSLog(@"Right thumbstick is (%f, %f).", xValue, yValue);
+	};
+	
+	controller.extendedGamepad.leftTrigger.valueChangedHandler = ^(GCControllerButtonInput *button, float value, BOOL pressed){
+		NSLog(@"Left trigger is %f.", value);
+	};
+	
+	controller.extendedGamepad.rightTrigger.valueChangedHandler = ^(GCControllerButtonInput *button, float value, BOOL pressed){
+		NSLog(@"Right trigger is %f.", value);
 	};
 	
 	[[NSNotificationCenter defaultCenter] addObserverForName:GCControllerDidDisconnectNotification object:controller queue:nil
