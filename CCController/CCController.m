@@ -106,17 +106,22 @@ SetupAxis(IOHIDElementRef element, int dmin, int dmax, float rmin, float rmax, i
 		IOHIDElementSetProperty(element, CFSTR(kIOHIDElementCalibrationDeadZoneMaxKey), (__bridge CFTypeRef)@(127 + deadZone));
 	}
 	
-//	IOHIDElementSetProperty(element, CFSTR(kIOHIDElementCalibrationGranularityKey), (__bridge CFTypeRef)@(1.0/64.0));
+//	IOHIDElementSetProperty(element, CFSTR(kIOHIDElementCalibrationGranularityKey), (__bridge CFTypeRef)@(1.0/2.0));
 }
 
 static void
 ControllerConnected(void *context, IOReturn result, void *sender, IOHIDDeviceRef device)
 {
 	if(result == kIOReturnSuccess){
+//		NSURL *url = [[NSBundle mainBundle] URLForResource:@"CCControllerConfig.plist" withExtension:nil];
+//		NSDictionary *config = [NSDictionary dictionaryWithContentsOfURL:url];
+//		
+//		NSAssert(@"CCControllerConfig.plist not found.");
+		
 		CCController *controller = [[CCController alloc] initWithDevice:device];
 		
 		// Register event/remove callbacks.for buttons and axes.
-		IOHIDValueCallback valueCallback = ControllerInputGeneric;
+		IOHIDValueCallback valueCallback = ControllerInputPS4;
 		
 		NSArray *matches = @[
 			@{@(kIOHIDElementUsagePageKey): @(kHIDPage_GenericDesktop)},
@@ -129,6 +134,7 @@ ControllerConnected(void *context, IOReturn result, void *sender, IOHIDDeviceRef
 		if(vid == 0x054C){ // Sony
 			if(pid == 0x5C4){ // DualShock 4
 				NSLog(@"[CCController initWithDevice:] Sony Dualshock 4 detected.");
+				valueCallback = ControllerInputPS4;
 				
 				const int deadZone = 10;
 				
@@ -143,6 +149,17 @@ ControllerConnected(void *context, IOReturn result, void *sender, IOHIDDeviceRef
 		} else if(vid == 0x045E){ // Microsoft
 			if(pid == 0x028E || pid == 0x028F){ // 360 wired/wireless
 				NSLog(@"[CCController initWithDevice:] Microsoft Xbox 360 controller detected.");
+				valueCallback = ControllerInput360;
+				
+				const int deadZone = 500;
+				
+				SetupAxis(GetAxis(device, 0x30), 0, 0, -1.0,  1.0, deadZone); // Left thumb x
+				SetupAxis(GetAxis(device, 0x31), 0, 0,  1.0, -1.0, deadZone); // Left thumb y
+				SetupAxis(GetAxis(device, 0x33), 0, 0, -1.0,  1.0, deadZone); // Right thumb x
+				SetupAxis(GetAxis(device, 0x34), 0, 0,  1.0, -1.0, deadZone); // Right thumb y
+				
+				SetupAxis(GetAxis(device, 0x32), 0, 0,  0.0,  1.0, 0); // Left trigger
+				SetupAxis(GetAxis(device, 0x35), 0, 0,  0.0,  1.0, 0); // Right trigger
 			}
 		} else if(vid == 0x057E){ // Nintendo
 			if(pid == 0x0306){
@@ -181,7 +198,64 @@ ControllerDisconnected(void *context, IOReturn result, void *sender)
 
 // Currently hardcoded for Dualshock 4 since that is all I have to test with.
 static void
-ControllerInputGeneric(void *context, IOReturn result, void *sender, IOHIDValueRef value)
+ControllerInput360(void *context, IOReturn result, void *sender, IOHIDValueRef value)
+{
+	if(result == kIOReturnSuccess){
+		CCController *controller = (__bridge CCController *)context;
+		GCExtendedGamepadSnapShotDataV100 *snapshot = &controller->_snapshot;
+		
+		IOHIDElementRef element = IOHIDValueGetElement(value);
+		
+		uint32_t usagePage = IOHIDElementGetUsagePage(element);
+		uint32_t usage = IOHIDElementGetUsage(element);
+		
+		int state = (int)IOHIDValueGetIntegerValue(value);
+		
+		// Auto-calibrate
+		NSInteger min = [(__bridge NSNumber *)IOHIDElementGetProperty(element, CFSTR(kIOHIDElementCalibrationSaturationMinKey)) integerValue];
+		NSInteger max = [(__bridge NSNumber *)IOHIDElementGetProperty(element, CFSTR(kIOHIDElementCalibrationSaturationMaxKey)) integerValue];
+		IOHIDElementSetProperty(element, CFSTR(kIOHIDElementCalibrationSaturationMinKey), (__bridge CFTypeRef)@(MIN(min, state)));
+		IOHIDElementSetProperty(element, CFSTR(kIOHIDElementCalibrationSaturationMaxKey), (__bridge CFTypeRef)@(MAX(max, state)));
+		
+		float analog = IOHIDValueGetScaledValue(value, kIOHIDValueScaleTypeCalibrated);
+		
+//		if(usage != 0x31 && usage != 0x30 && usage != 0x33 && usage != 0x34)
+//			NSLog(@"usagePage: 0x%02X, usage 0x%02X, value: %d / %f", usagePage, usage, state, analog);
+		
+		if(usagePage == kHIDPage_Button){
+			switch(usage){
+				case 0x01: snapshot->buttonA = state; break;
+				case 0x02: snapshot->buttonB = state; break;
+				case 0x03: snapshot->buttonX = state; break;
+				case 0x04: snapshot->buttonY = state; break;
+				case 0x05: snapshot->leftShoulder = state; break;
+				case 0x06: snapshot->rightShoulder = state; break;
+				case 0x09: if(state) controller.controllerPausedHandler(controller); break;
+				
+				// Dpad
+				case 0x0E: snapshot->dpadX -= (state ? 1.0f : -1.0f); break;
+				case 0x0F: snapshot->dpadX += (state ? 1.0f : -1.0f); break;
+				case 0x0D: snapshot->dpadY -= (state ? 1.0f : -1.0f); break;
+				case 0x0C: snapshot->dpadY += (state ? 1.0f : -1.0f); break;
+			}
+		} else if(usagePage == kHIDPage_GenericDesktop){
+			switch(usage){
+				case 0x30: snapshot->leftThumbstickX = analog; break;
+				case 0x31: snapshot->leftThumbstickY = analog; break;
+				case 0x33: snapshot->rightThumbstickX = analog; break;
+				case 0x34: snapshot->rightThumbstickY = analog; break;
+				case 0x32: snapshot->leftTrigger = analog; break;
+				case 0x35: snapshot->rightTrigger = analog; break;
+			}
+		}
+		
+		controller->_gamepad.snapshotData = NSDataFromGCExtendedGamepadSnapShotDataV100(snapshot);
+	}
+}
+
+// Currently hardcoded for Dualshock 4 since that is all I have to test with.
+static void
+ControllerInputPS4(void *context, IOReturn result, void *sender, IOHIDValueRef value)
 {
 	if(result == kIOReturnSuccess){
 		CCController *controller = (__bridge CCController *)context;
