@@ -73,6 +73,13 @@ ActivateController(GCController *controller)
 }
 
 int main(int argc, const char * argv[]) {
+//	GCExtendedGamepadSnapshot *snapshot = [[GCExtendedGamepadSnapshot alloc] init];
+//	for(;;){
+//		@autoreleasepool {
+//			GCExtendedGamepadSnapshot *s = [snapshot saveSnapshot];
+//		}
+//	}
+	
 	@autoreleasepool {
 		NSArray *controllers = [CCController controllers];
 		NSLog(@"%d controllers found.", (int)controllers.count);

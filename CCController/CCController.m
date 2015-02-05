@@ -200,56 +200,58 @@ ControllerDisconnected(void *context, IOReturn result, void *sender)
 static void
 ControllerInput360(void *context, IOReturn result, void *sender, IOHIDValueRef value)
 {
-	if(result == kIOReturnSuccess){
-		CCController *controller = (__bridge CCController *)context;
-		GCExtendedGamepadSnapShotDataV100 *snapshot = &controller->_snapshot;
-		
-		IOHIDElementRef element = IOHIDValueGetElement(value);
-		
-		uint32_t usagePage = IOHIDElementGetUsagePage(element);
-		uint32_t usage = IOHIDElementGetUsage(element);
-		
-		int state = (int)IOHIDValueGetIntegerValue(value);
-		
-		// Auto-calibrate
-		NSInteger min = [(__bridge NSNumber *)IOHIDElementGetProperty(element, CFSTR(kIOHIDElementCalibrationSaturationMinKey)) integerValue];
-		NSInteger max = [(__bridge NSNumber *)IOHIDElementGetProperty(element, CFSTR(kIOHIDElementCalibrationSaturationMaxKey)) integerValue];
-		IOHIDElementSetProperty(element, CFSTR(kIOHIDElementCalibrationSaturationMinKey), (__bridge CFTypeRef)@(MIN(min, state)));
-		IOHIDElementSetProperty(element, CFSTR(kIOHIDElementCalibrationSaturationMaxKey), (__bridge CFTypeRef)@(MAX(max, state)));
-		
-		float analog = IOHIDValueGetScaledValue(value, kIOHIDValueScaleTypeCalibrated);
-		
-//		if(usage != 0x31 && usage != 0x30 && usage != 0x33 && usage != 0x34)
-//			NSLog(@"usagePage: 0x%02X, usage 0x%02X, value: %d / %f", usagePage, usage, state, analog);
-		
-		if(usagePage == kHIDPage_Button){
-			switch(usage){
-				case 0x01: snapshot->buttonA = state; break;
-				case 0x02: snapshot->buttonB = state; break;
-				case 0x03: snapshot->buttonX = state; break;
-				case 0x04: snapshot->buttonY = state; break;
-				case 0x05: snapshot->leftShoulder = state; break;
-				case 0x06: snapshot->rightShoulder = state; break;
-				case 0x09: if(state) controller.controllerPausedHandler(controller); break;
-				
-				// Dpad
-				case 0x0E: snapshot->dpadX -= (state ? 1.0f : -1.0f); break;
-				case 0x0F: snapshot->dpadX += (state ? 1.0f : -1.0f); break;
-				case 0x0D: snapshot->dpadY -= (state ? 1.0f : -1.0f); break;
-				case 0x0C: snapshot->dpadY += (state ? 1.0f : -1.0f); break;
+	@autoreleasepool {
+		if(result == kIOReturnSuccess){
+			CCController *controller = (__bridge CCController *)context;
+			GCExtendedGamepadSnapShotDataV100 *snapshot = &controller->_snapshot;
+			
+			IOHIDElementRef element = IOHIDValueGetElement(value);
+			
+			uint32_t usagePage = IOHIDElementGetUsagePage(element);
+			uint32_t usage = IOHIDElementGetUsage(element);
+			
+			int state = (int)IOHIDValueGetIntegerValue(value);
+			
+			// Auto-calibrate
+			NSInteger min = [(__bridge NSNumber *)IOHIDElementGetProperty(element, CFSTR(kIOHIDElementCalibrationSaturationMinKey)) integerValue];
+			NSInteger max = [(__bridge NSNumber *)IOHIDElementGetProperty(element, CFSTR(kIOHIDElementCalibrationSaturationMaxKey)) integerValue];
+			IOHIDElementSetProperty(element, CFSTR(kIOHIDElementCalibrationSaturationMinKey), (__bridge CFTypeRef)@(MIN(min, state)));
+			IOHIDElementSetProperty(element, CFSTR(kIOHIDElementCalibrationSaturationMaxKey), (__bridge CFTypeRef)@(MAX(max, state)));
+			
+			float analog = IOHIDValueGetScaledValue(value, kIOHIDValueScaleTypeCalibrated);
+			
+	//		if(usage != 0x31 && usage != 0x30 && usage != 0x33 && usage != 0x34)
+	//			NSLog(@"usagePage: 0x%02X, usage 0x%02X, value: %d / %f", usagePage, usage, state, analog);
+			
+			if(usagePage == kHIDPage_Button){
+				switch(usage){
+					case 0x01: snapshot->buttonA = state; break;
+					case 0x02: snapshot->buttonB = state; break;
+					case 0x03: snapshot->buttonX = state; break;
+					case 0x04: snapshot->buttonY = state; break;
+					case 0x05: snapshot->leftShoulder = state; break;
+					case 0x06: snapshot->rightShoulder = state; break;
+					case 0x09: if(state) controller.controllerPausedHandler(controller); break;
+					
+					// Dpad
+					case 0x0E: snapshot->dpadX -= (state ? 1.0f : -1.0f); break;
+					case 0x0F: snapshot->dpadX += (state ? 1.0f : -1.0f); break;
+					case 0x0D: snapshot->dpadY -= (state ? 1.0f : -1.0f); break;
+					case 0x0C: snapshot->dpadY += (state ? 1.0f : -1.0f); break;
+				}
+			} else if(usagePage == kHIDPage_GenericDesktop){
+				switch(usage){
+					case 0x30: snapshot->leftThumbstickX = analog; break;
+					case 0x31: snapshot->leftThumbstickY = analog; break;
+					case 0x33: snapshot->rightThumbstickX = analog; break;
+					case 0x34: snapshot->rightThumbstickY = analog; break;
+					case 0x32: snapshot->leftTrigger = analog; break;
+					case 0x35: snapshot->rightTrigger = analog; break;
+				}
 			}
-		} else if(usagePage == kHIDPage_GenericDesktop){
-			switch(usage){
-				case 0x30: snapshot->leftThumbstickX = analog; break;
-				case 0x31: snapshot->leftThumbstickY = analog; break;
-				case 0x33: snapshot->rightThumbstickX = analog; break;
-				case 0x34: snapshot->rightThumbstickY = analog; break;
-				case 0x32: snapshot->leftTrigger = analog; break;
-				case 0x35: snapshot->rightTrigger = analog; break;
-			}
+			
+			controller->_gamepad.snapshotData = NSDataFromGCExtendedGamepadSnapShotDataV100(snapshot);
 		}
-		
-		controller->_gamepad.snapshotData = NSDataFromGCExtendedGamepadSnapShotDataV100(snapshot);
 	}
 }
 
@@ -257,56 +259,59 @@ ControllerInput360(void *context, IOReturn result, void *sender, IOHIDValueRef v
 static void
 ControllerInputPS4(void *context, IOReturn result, void *sender, IOHIDValueRef value)
 {
-	if(result == kIOReturnSuccess){
-		CCController *controller = (__bridge CCController *)context;
-		GCExtendedGamepadSnapShotDataV100 *snapshot = &controller->_snapshot;
-		
-		IOHIDElementRef element = IOHIDValueGetElement(value);
-		
-		uint32_t usagePage = IOHIDElementGetUsagePage(element);
-		uint32_t usage = IOHIDElementGetUsage(element);
-		
-		int state = (int)IOHIDValueGetIntegerValue(value);
-		float analog = IOHIDValueGetScaledValue(value, kIOHIDValueScaleTypeCalibrated);
-		
-//		NSLog(@"usagePage: 0x%02X, usage 0x%02X, value: %d / %f", usagePage, usage, state, analog);
-		
-		if(usagePage == kHIDPage_Button){
-			switch(usage){
-				case 0x02: snapshot->buttonA = state; break;
-				case 0x03: snapshot->buttonB = state; break;
-				case 0x01: snapshot->buttonX = state; break;
-				case 0x04: snapshot->buttonY = state; break;
-				case 0x05: snapshot->leftShoulder = state; break;
-				case 0x06: snapshot->rightShoulder = state; break;
-				case 0x0A: if(state) controller.controllerPausedHandler(controller); break;
-			}
-		} else if(usagePage == kHIDPage_GenericDesktop){
-			if(usage == 0x39){
-				switch(state){
-					case  0: snapshot->dpadX =  0.0; snapshot->dpadY =  1.0; break;
-					case  1: snapshot->dpadX =  1.0; snapshot->dpadY =  1.0; break;
-					case  2: snapshot->dpadX =  1.0; snapshot->dpadY =  0.0; break;
-					case  3: snapshot->dpadX =  1.0; snapshot->dpadY = -1.0; break;
-					case  4: snapshot->dpadX =  0.0; snapshot->dpadY = -1.0; break;
-					case  5: snapshot->dpadX = -1.0; snapshot->dpadY = -1.0; break;
-					case  6: snapshot->dpadX = -1.0; snapshot->dpadY =  0.0; break;
-					case  7: snapshot->dpadX = -1.0; snapshot->dpadY =  1.0; break;
-					default: snapshot->dpadX =  0.0; snapshot->dpadY =  0.0; break;
-				}
-			} else {
+	@autoreleasepool {
+		if(result == kIOReturnSuccess){
+			CCController *controller = (__bridge CCController *)context;
+			GCExtendedGamepadSnapShotDataV100 *snapshot = &controller->_snapshot;
+			
+			IOHIDElementRef element = IOHIDValueGetElement(value);
+			
+			uint32_t usagePage = IOHIDElementGetUsagePage(element);
+			uint32_t usage = IOHIDElementGetUsage(element);
+			
+			int state = (int)IOHIDValueGetIntegerValue(value);
+			float analog = IOHIDValueGetScaledValue(value, kIOHIDValueScaleTypeCalibrated);
+			
+	//		NSLog(@"usagePage: 0x%02X, usage 0x%02X, value: %d / %f", usagePage, usage, state, analog);
+			
+			if(usagePage == kHIDPage_Button){
 				switch(usage){
-					case 0x30: snapshot->leftThumbstickX = analog; break;
-					case 0x31: snapshot->leftThumbstickY = analog; break;
-					case 0x32: snapshot->rightThumbstickX = analog; break;
-					case 0x35: snapshot->rightThumbstickY = analog; break;
-					case 0x33: snapshot->leftTrigger = analog; break;
-					case 0x34: snapshot->rightTrigger = analog; break;
+					case 0x02: snapshot->buttonA = state; break;
+					case 0x03: snapshot->buttonB = state; break;
+					case 0x01: snapshot->buttonX = state; break;
+					case 0x04: snapshot->buttonY = state; break;
+					case 0x05: snapshot->leftShoulder = state; break;
+					case 0x06: snapshot->rightShoulder = state; break;
+					case 0x0A: if(state) controller.controllerPausedHandler(controller); break;
+				}
+			} else if(usagePage == kHIDPage_GenericDesktop){
+				if(usage == 0x39){
+					switch(state){
+						case  0: snapshot->dpadX =  0.0; snapshot->dpadY =  1.0; break;
+						case  1: snapshot->dpadX =  1.0; snapshot->dpadY =  1.0; break;
+						case  2: snapshot->dpadX =  1.0; snapshot->dpadY =  0.0; break;
+						case  3: snapshot->dpadX =  1.0; snapshot->dpadY = -1.0; break;
+						case  4: snapshot->dpadX =  0.0; snapshot->dpadY = -1.0; break;
+						case  5: snapshot->dpadX = -1.0; snapshot->dpadY = -1.0; break;
+						case  6: snapshot->dpadX = -1.0; snapshot->dpadY =  0.0; break;
+						case  7: snapshot->dpadX = -1.0; snapshot->dpadY =  1.0; break;
+						default: snapshot->dpadX =  0.0; snapshot->dpadY =  0.0; break;
+					}
+				} else {
+					switch(usage){
+						case 0x30: snapshot->leftThumbstickX = analog; break;
+						case 0x31: snapshot->leftThumbstickY = analog; break;
+						case 0x32: snapshot->rightThumbstickX = analog; break;
+						case 0x35: snapshot->rightThumbstickY = analog; break;
+						case 0x33: snapshot->leftTrigger = analog; break;
+						case 0x34: snapshot->rightTrigger = analog; break;
+					}
 				}
 			}
+			
+			controller->_gamepad.snapshotData = NSDataFromGCExtendedGamepadSnapShotDataV100(snapshot);
+			[controller->_gamepad saveSnapshot];
 		}
-		
-		controller->_gamepad.snapshotData = NSDataFromGCExtendedGamepadSnapShotDataV100(snapshot);
 	}
 }
 
