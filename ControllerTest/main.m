@@ -73,10 +73,10 @@ ActivateController(GCController *controller)
 }
 
 int main(int argc, const char * argv[]) {
-//	GCExtendedGamepadSnapshot *snapshot = [[GCExtendedGamepadSnapshot alloc] init];
+//	GCExtendedGamepadSnapshot *gamepad = [[GCExtendedGamepadSnapshot alloc] init];
 //	for(;;){
 //		@autoreleasepool {
-//			GCExtendedGamepadSnapshot *s = [snapshot saveSnapshot];
+//			[gamepad snapshotDataFast];
 //		}
 //	}
 	

@@ -330,3 +330,32 @@ ControllerInputPS4(void *context, IOReturn result, void *sender, IOHIDValueRef v
 }
 
 @end
+
+
+@implementation GCExtendedGamepad(SnapshotDataFast)
+
+-(NSData *)snapshotDataFast
+{
+	GCExtendedGamepadSnapShotDataV100 snapshot = {
+		.version = 0x0100,
+		.size = sizeof(GCExtendedGamepadSnapShotDataV100),
+		.dpadX = self.dpad.xAxis.value,
+		.dpadY = self.dpad.yAxis.value,
+		.buttonA = self.buttonA.value,
+		.buttonB = self.buttonB.value,
+		.buttonX = self.buttonX.value,
+		.buttonY = self.buttonY.value,
+		.leftShoulder = self.leftShoulder.value,
+		.rightShoulder = self.rightShoulder.value,
+		.leftThumbstickX = self.leftThumbstick.xAxis.value,
+		.leftThumbstickY = self.leftThumbstick.yAxis.value,
+		.rightThumbstickX = self.rightThumbstick.xAxis.value,
+		.rightThumbstickY = self.rightThumbstick.yAxis.value,
+		.leftTrigger = self.leftTrigger.value,
+		.rightTrigger = self.rightTrigger.value,
+	};
+	
+	return NSDataFromGCExtendedGamepadSnapShotDataV100(&snapshot);
+}
+
+@end
