@@ -32,11 +32,10 @@ ActivateController(GCController *controller)
 		);
 	};
 	
-	[[NSNotificationCenter defaultCenter] addObserverForName:GCControllerDidDisconnectNotification object:controller queue:nil
-		usingBlock:^(NSNotification *notification){
-			NSLog(@"Deactivating controller: %@", notification.object);
-		}
-	];
+	__block id observer = [[NSNotificationCenter defaultCenter] addObserverForName:GCControllerDidDisconnectNotification object:controller queue:nil usingBlock:^(NSNotification *notification){
+		NSLog(@"Deactivating controller: %@", notification.object);
+		[[NSNotificationCenter defaultCenter] removeObserver:observer];
+	}];
 }
 
 int main(int argc, const char * argv[]) {
