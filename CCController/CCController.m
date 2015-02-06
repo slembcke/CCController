@@ -4,9 +4,25 @@
 #include <IOKit/hid/IOHIDLib.h>
 
 
+struct AxisRange {
+	CFIndex min, max;
+};
+
+
+const float DeadZonePercent = 0.1f;
+
+
 @implementation CCController {
 	GCExtendedGamepadSnapShotDataV100 _snapshot;
 	GCExtendedGamepadSnapshot *_gamepad;
+	
+	float _deadZonePercent;
+	struct AxisRange _lThumbXRange;
+	struct AxisRange _lThumbYRange;
+	struct AxisRange _rThumbXRange;
+	struct AxisRange _rThumbYRange;
+	struct AxisRange _lTriggerRange;
+	struct AxisRange _rTriggerRange;
 }
 
 @synthesize controllerPausedHandler = _controllerPausedHandler;
@@ -93,18 +109,23 @@ GetAxis(IOHIDDeviceRef device, int axis)
 }
 
 static void
-SetupAxis(IOHIDElementRef element, int dmin, int dmax, float rmin, float rmax, int deadZone)
+SetupAxis(IOHIDDeviceRef device, IOHIDElementRef element, struct AxisRange *range, int dmin, int dmax)
 {
-	IOHIDElementSetProperty(element, CFSTR(kIOHIDElementCalibrationMinKey), (__bridge CFTypeRef)@(rmin));
-	IOHIDElementSetProperty(element, CFSTR(kIOHIDElementCalibrationMaxKey), (__bridge CFTypeRef)@(rmax));
+	IOHIDElementSetProperty(element, CFSTR(kIOHIDElementCalibrationMinKey), (__bridge CFTypeRef)@(dmin));
+	IOHIDElementSetProperty(element, CFSTR(kIOHIDElementCalibrationMaxKey), (__bridge CFTypeRef)@(dmax));
 	
-	IOHIDElementSetProperty(element, CFSTR(kIOHIDElementCalibrationSaturationMinKey), (__bridge CFTypeRef)@(dmin));
-	IOHIDElementSetProperty(element, CFSTR(kIOHIDElementCalibrationSaturationMaxKey), (__bridge CFTypeRef)@(dmax));
-	
-	if(deadZone){
-		IOHIDElementSetProperty(element, CFSTR(kIOHIDElementCalibrationDeadZoneMinKey), (__bridge CFTypeRef)@(127 - deadZone));
-		IOHIDElementSetProperty(element, CFSTR(kIOHIDElementCalibrationDeadZoneMaxKey), (__bridge CFTypeRef)@(127 + deadZone));
+	// Set calibration range to the current value.
+	IOHIDValueRef value = NULL;
+	if(IOHIDDeviceGetValue(device, element, &value) != kIOReturnSuccess){
+		NSLog(@"Error initializing gamepad axis.");
+		return;
 	}
+	
+	CFIndex rest = IOHIDValueGetIntegerValue(value);
+	range->min = range->max = rest;
+	
+	IOHIDElementSetProperty(element, CFSTR(kIOHIDElementCalibrationSaturationMinKey), (__bridge CFTypeRef)@(rest));
+	IOHIDElementSetProperty(element, CFSTR(kIOHIDElementCalibrationSaturationMaxKey), (__bridge CFTypeRef)@(rest));
 	
 //	IOHIDElementSetProperty(element, CFSTR(kIOHIDElementCalibrationGranularityKey), (__bridge CFTypeRef)@(1.0/2.0));
 }
@@ -136,43 +157,35 @@ ControllerConnected(void *context, IOReturn result, void *sender, IOHIDDeviceRef
 				NSLog(@"[CCController initWithDevice:] Sony Dualshock 4 detected.");
 				valueCallback = ControllerInputPS4;
 				
-				const int deadZone = 10;
+				SetupAxis(device, GetAxis(device, 0x30), &controller->_lThumbXRange, -1.0,  1.0); // Left thumb x
+				SetupAxis(device, GetAxis(device, 0x31), &controller->_lThumbYRange,  1.0, -1.0); // Left thumb y
+				SetupAxis(device, GetAxis(device, 0x32), &controller->_rThumbXRange, -1.0,  1.0); // Right thumb x
+				SetupAxis(device, GetAxis(device, 0x35), &controller->_rThumbYRange,  1.0, -1.0); // Right thumb y
 				
-				SetupAxis(GetAxis(device, 0x30), 0, 255, -1.0,  1.0, deadZone); // Left thumb x
-				SetupAxis(GetAxis(device, 0x31), 0, 255,  1.0, -1.0, deadZone); // Left thumb y
-				SetupAxis(GetAxis(device, 0x32), 0, 255, -1.0,  1.0, deadZone); // Right thumb x
-				SetupAxis(GetAxis(device, 0x35), 0, 255,  1.0, -1.0, deadZone); // Right thumb y
-				
-				SetupAxis(GetAxis(device, 0x33), 0, 255,  0.0,  1.0, 0); // Left trigger
-				SetupAxis(GetAxis(device, 0x34), 0, 255,  0.0,  1.0, 0); // Right trigger
+				SetupAxis(device, GetAxis(device, 0x33), &controller->_lTriggerRange, 0.0,  1.0); // Left trigger
+				SetupAxis(device, GetAxis(device, 0x34), &controller->_rTriggerRange, 0.0,  1.0); // Right trigger
 			}
 		} else if(vid == 0x045E){ // Microsoft
 			if(pid == 0x028E || pid == 0x028F){ // 360 wired/wireless
 				NSLog(@"[CCController initWithDevice:] Microsoft Xbox 360 controller detected.");
 				valueCallback = ControllerInput360;
 				
-				const int deadZone = 500;
-				
-				SetupAxis(GetAxis(device, 0x30), 0, 0, -1.0,  1.0, deadZone); // Left thumb x
-				SetupAxis(GetAxis(device, 0x31), 0, 0,  1.0, -1.0, deadZone); // Left thumb y
-				SetupAxis(GetAxis(device, 0x33), 0, 0, -1.0,  1.0, deadZone); // Right thumb x
-				SetupAxis(GetAxis(device, 0x34), 0, 0,  1.0, -1.0, deadZone); // Right thumb y
-				
-				SetupAxis(GetAxis(device, 0x32), 0, 0,  0.0,  1.0, 0); // Left trigger
-				SetupAxis(GetAxis(device, 0x35), 0, 0,  0.0,  1.0, 0); // Right trigger
+//				SetupAxis(device, GetAxis(device, 0x30), -1.0,  1.0); // Left thumb x
+//				SetupAxis(device, GetAxis(device, 0x31),  1.0, -1.0); // Left thumb y
+//				SetupAxis(device, GetAxis(device, 0x33), -1.0,  1.0); // Right thumb x
+//				SetupAxis(device, GetAxis(device, 0x34),  1.0, -1.0); // Right thumb y
+//				
+//				SetupAxis(device, GetAxis(device, 0x32),  0.0,  1.0); // Left trigger
+//				SetupAxis(device, GetAxis(device, 0x35),  0.0,  1.0); // Right trigger
 			}
 		} else if(vid == 0x057E){ // Nintendo
 			if(pid == 0x0306){
 				NSLog(@"[CCController initWithDevice:] Nintendo Wiimote detected.");
+				
+				// TODO can we do anything sensible with this?
 			}
 		}
 
-		// How to reduce the sampling rate?
-		// Eats up a lot of CPU processing sub-ms samples.
-//		IOHIDDeviceSetProperty(device, CFSTR(kIOHIDSampleIntervalKey), (__bridge CFTypeRef)@(1e-64));
-//		double interval = [(__bridge NSNumber *)IOHIDDeviceGetProperty(device, CFSTR(kIOHIDSampleIntervalKey)) doubleValue];
-//		NSLog(@"interval: %f", interval);
-		
 		IOHIDDeviceSetInputValueMatchingMultiple(device, (__bridge CFArrayRef)matches);
 		IOHIDDeviceRegisterInputValueCallback(device, valueCallback, (__bridge void *)controller);
 		IOHIDDeviceRegisterRemovalCallback(device, ControllerDisconnected, (void *)CFBridgingRetain(controller));
@@ -196,7 +209,40 @@ ControllerDisconnected(void *context, IOReturn result, void *sender)
 
 //MARK: Input callbacks
 
-// Currently hardcoded for Dualshock 4 since that is all I have to test with.
+static float
+Clamp01(float value)
+{	
+	return MAX(0.0f, MIN(value, 1.0f));
+}
+
+static void
+AutoCalibrateAxis(IOHIDDeviceRef device, IOHIDElementRef element, struct AxisRange *range, CFIndex value, BOOL updateDeadZone)
+{
+	BOOL deadZoneNeedsUpdate = NO;
+	
+	if(value < range->min){
+		range->min = value;
+		deadZoneNeedsUpdate = YES;
+		
+		IOHIDElementSetProperty(element, CFSTR(kIOHIDElementCalibrationSaturationMinKey), (__bridge CFTypeRef)@(value));
+	}
+	
+	if(value > range->max){
+		range->max = value;
+		deadZoneNeedsUpdate = YES;
+		
+		IOHIDElementSetProperty(element, CFSTR(kIOHIDElementCalibrationSaturationMaxKey), (__bridge CFTypeRef)@(value));
+	}
+	
+	if(updateDeadZone && deadZoneNeedsUpdate){
+		CFIndex mid = (range->min + range->max)/2;
+		CFIndex deadZone = mid*DeadZonePercent;
+		
+		IOHIDElementSetProperty(element, CFSTR(kIOHIDElementCalibrationDeadZoneMinKey), (__bridge CFTypeRef)@(mid - deadZone));
+		IOHIDElementSetProperty(element, CFSTR(kIOHIDElementCalibrationDeadZoneMaxKey), (__bridge CFTypeRef)@(mid + deadZone));
+	}
+}
+
 static void
 ControllerInput360(void *context, IOReturn result, void *sender, IOHIDValueRef value)
 {
@@ -234,10 +280,10 @@ ControllerInput360(void *context, IOReturn result, void *sender, IOHIDValueRef v
 					case 0x09: if(state) controller.controllerPausedHandler(controller); break;
 					
 					// Dpad
-					case 0x0E: snapshot->dpadX -= (state ? 1.0f : -1.0f); break;
-					case 0x0F: snapshot->dpadX += (state ? 1.0f : -1.0f); break;
-					case 0x0D: snapshot->dpadY -= (state ? 1.0f : -1.0f); break;
-					case 0x0C: snapshot->dpadY += (state ? 1.0f : -1.0f); break;
+					case 0x0E: snapshot->dpadX = Clamp01(snapshot->dpadX - (state ? 1.0f : -1.0f)); break;
+					case 0x0F: snapshot->dpadX = Clamp01(snapshot->dpadX + (state ? 1.0f : -1.0f)); break;
+					case 0x0D: snapshot->dpadY = Clamp01(snapshot->dpadY - (state ? 1.0f : -1.0f)); break;
+					case 0x0C: snapshot->dpadY = Clamp01(snapshot->dpadY + (state ? 1.0f : -1.0f)); break;
 				}
 			} else if(usagePage == kHIDPage_GenericDesktop){
 				switch(usage){
@@ -255,7 +301,6 @@ ControllerInput360(void *context, IOReturn result, void *sender, IOHIDValueRef v
 	}
 }
 
-// Currently hardcoded for Dualshock 4 since that is all I have to test with.
 static void
 ControllerInputPS4(void *context, IOReturn result, void *sender, IOHIDValueRef value)
 {
@@ -265,11 +310,12 @@ ControllerInputPS4(void *context, IOReturn result, void *sender, IOHIDValueRef v
 			GCExtendedGamepadSnapShotDataV100 *snapshot = &controller->_snapshot;
 			
 			IOHIDElementRef element = IOHIDValueGetElement(value);
+			IOHIDDeviceRef device = IOHIDElementGetDevice(element);
 			
 			uint32_t usagePage = IOHIDElementGetUsagePage(element);
 			uint32_t usage = IOHIDElementGetUsage(element);
 			
-			int state = (int)IOHIDValueGetIntegerValue(value);
+			CFIndex state = (int)IOHIDValueGetIntegerValue(value);
 			float analog = IOHIDValueGetScaledValue(value, kIOHIDValueScaleTypeCalibrated);
 			
 	//		NSLog(@"usagePage: 0x%02X, usage 0x%02X, value: %d / %f", usagePage, usage, state, analog);
@@ -298,19 +344,23 @@ ControllerInputPS4(void *context, IOReturn result, void *sender, IOHIDValueRef v
 						default: snapshot->dpadX =  0.0; snapshot->dpadY =  0.0; break;
 					}
 				} else {
+					struct AxisRange *axisRange = NULL;
+					BOOL updateDeadZone = YES;
+					
 					switch(usage){
-						case 0x30: snapshot->leftThumbstickX = analog; break;
-						case 0x31: snapshot->leftThumbstickY = analog; break;
-						case 0x32: snapshot->rightThumbstickX = analog; break;
-						case 0x35: snapshot->rightThumbstickY = analog; break;
-						case 0x33: snapshot->leftTrigger = analog; break;
-						case 0x34: snapshot->rightTrigger = analog; break;
+						case 0x30: snapshot->leftThumbstickX  = analog; axisRange = &controller->_lThumbXRange; break;
+						case 0x31: snapshot->leftThumbstickY  = analog; axisRange = &controller->_lThumbYRange; break;
+						case 0x32: snapshot->rightThumbstickX = analog; axisRange = &controller->_rThumbXRange; break;
+						case 0x35: snapshot->rightThumbstickY = analog; axisRange = &controller->_rThumbYRange; break;
+						case 0x33: snapshot->leftTrigger      = analog; axisRange = &controller->_lTriggerRange; updateDeadZone = NO; break;
+						case 0x34: snapshot->rightTrigger     = analog; axisRange = &controller->_rTriggerRange; updateDeadZone = NO; break;
 					}
+					
+					if(axisRange) AutoCalibrateAxis(device, element, axisRange, state, updateDeadZone);
 				}
 			}
 			
 			controller->_gamepad.snapshotData = NSDataFromGCExtendedGamepadSnapShotDataV100(snapshot);
-			[controller->_gamepad saveSnapshot];
 		}
 	}
 }
@@ -319,13 +369,14 @@ ControllerInputPS4(void *context, IOReturn result, void *sender, IOHIDValueRef v
 
 -(GCGamepad *)gamepad
 {
-	// Duck typing hack.
-	// This isn't quite correct since the snapshot property will return data of the wrong format.
-	return (GCGamepad *)_gamepad;
+	// Not implemented for now.
+	return nil;
 }
 
 -(GCExtendedGamepad *)extendedGamepad
 {
+	// TODO should make this weak and lazy.
+	// Then we can pump the gamepad data only when it's active.
 	return _gamepad;
 }
 

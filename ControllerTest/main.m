@@ -21,48 +21,15 @@ ActivateController(GCController *controller)
 		NSLog(@"Pause button.");
 	};
 	
-	controller.extendedGamepad.buttonA.valueChangedHandler = ^(GCControllerButtonInput *button, float value, BOOL pressed){
-		NSLog(@"A button is %@.", pressed ? @"YES" : @"NO");
-	};
-	
-	controller.extendedGamepad.buttonB.valueChangedHandler = ^(GCControllerButtonInput *button, float value, BOOL pressed){
-		NSLog(@"B button is %@.", pressed ? @"YES" : @"NO");
-	};
-	
-	controller.extendedGamepad.buttonX.valueChangedHandler = ^(GCControllerButtonInput *button, float value, BOOL pressed){
-		NSLog(@"X button is %@.", pressed ? @"YES" : @"NO");
-	};
-	
-	controller.extendedGamepad.buttonY.valueChangedHandler = ^(GCControllerButtonInput *button, float value, BOOL pressed){
-		NSLog(@"Y button is %@.", pressed ? @"YES" : @"NO");
-	};
-	
-	controller.extendedGamepad.leftShoulder.valueChangedHandler = ^(GCControllerButtonInput *button, float value, BOOL pressed){
-		NSLog(@"Left shoulder is %@.", pressed ? @"YES" : @"NO");
-	};
-	
-	controller.extendedGamepad.rightShoulder.valueChangedHandler = ^(GCControllerButtonInput *button, float value, BOOL pressed){
-		NSLog(@"Right shoulder is %@.", pressed ? @"YES" : @"NO");
-	};
-	
-	controller.extendedGamepad.dpad.valueChangedHandler = ^(GCControllerDirectionPad *dpad, float xValue, float yValue){
-		NSLog(@"Dpad is (%f, %f).", xValue, yValue);
-	};
-	
-	controller.extendedGamepad.leftThumbstick.valueChangedHandler = ^(GCControllerDirectionPad *dpad, float xValue, float yValue){
-		NSLog(@"Left thumbstick is (%f, %f).", xValue, yValue);
-	};
-	
-	controller.extendedGamepad.rightThumbstick.valueChangedHandler = ^(GCControllerDirectionPad *dpad, float xValue, float yValue){
-		NSLog(@"Right thumbstick is (%f, %f).", xValue, yValue);
-	};
-	
-	controller.extendedGamepad.leftTrigger.valueChangedHandler = ^(GCControllerButtonInput *button, float value, BOOL pressed){
-		NSLog(@"Left trigger is %f.", value);
-	};
-	
-	controller.extendedGamepad.rightTrigger.valueChangedHandler = ^(GCControllerButtonInput *button, float value, BOOL pressed){
-		NSLog(@"Right trigger is %f.", value);
+	controller.extendedGamepad.valueChangedHandler = ^(GCExtendedGamepad *gamepad, GCControllerElement *element){
+		NSLog(@"L: (% .1f, % .1f), R: (% .1f, % .1f), DPad: (% .1f, % .1f), LT: %.1f, RT: %.1f, RS: %d, LS: %d, A: %d, B: %d, X: %d, Y: %d",
+			gamepad.leftThumbstick.xAxis.value, gamepad.leftThumbstick.yAxis.value,
+			gamepad.rightThumbstick.xAxis.value, gamepad.rightThumbstick.yAxis.value,
+			gamepad.dpad.xAxis.value, gamepad.dpad.yAxis.value,
+			gamepad.leftTrigger.value, gamepad.rightTrigger.value,
+			gamepad.leftShoulder.pressed, gamepad.rightShoulder.pressed,
+			gamepad.buttonA.pressed, gamepad.buttonB.pressed, gamepad.buttonX.pressed, gamepad.buttonY.pressed
+		);
 	};
 	
 	[[NSNotificationCenter defaultCenter] addObserverForName:GCControllerDidDisconnectNotification object:controller queue:nil
