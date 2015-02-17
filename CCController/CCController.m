@@ -224,7 +224,6 @@ ControllerConnected(void *context, IOReturn result, void *sender, IOHIDDeviceRef
 		IOHIDDeviceSetInputValueMatchingMultiple(device, (__bridge CFArrayRef)matches);
 		IOHIDDeviceRegisterInputValueCallback(device, ControllerInput, (__bridge void *)controller);
 		IOHIDDeviceRegisterRemovalCallback(device, ControllerDisconnected, (void *)CFBridgingRetain(controller));
-		IOHIDDeviceScheduleWithRunLoop(device, CFRunLoopGetMain(), kCFRunLoopDefaultMode);
 		
 		[CONTROLLERS addObject:controller];
 		[[NSNotificationCenter defaultCenter] postNotificationName:GCControllerDidConnectNotification object:controller];
