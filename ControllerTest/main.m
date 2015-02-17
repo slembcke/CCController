@@ -21,6 +21,14 @@ ActivateController(GCController *controller)
 		NSLog(@"Pause button.");
 	};
 	
+//	controller.gamepad.valueChangedHandler = ^(GCGamepad *gamepad, GCControllerElement *element){
+//		NSLog(@"DPad: (% .1f, % .1f), RS: %d, LS: %d, A: %d, B: %d, X: %d, Y: %d",
+//			gamepad.dpad.xAxis.value, gamepad.dpad.yAxis.value,
+//			gamepad.leftShoulder.pressed, gamepad.rightShoulder.pressed,
+//			gamepad.buttonA.pressed, gamepad.buttonB.pressed, gamepad.buttonX.pressed, gamepad.buttonY.pressed
+//		);
+//	};
+	
 	controller.extendedGamepad.valueChangedHandler = ^(GCExtendedGamepad *gamepad, GCControllerElement *element){
 		NSLog(@"L: (% .1f, % .1f), R: (% .1f, % .1f), DPad: (% .1f, % .1f), LT: %.1f, RT: %.1f, RS: %d, LS: %d, A: %d, B: %d, X: %d, Y: %d",
 			gamepad.leftThumbstick.xAxis.value, gamepad.leftThumbstick.yAxis.value,
@@ -39,13 +47,6 @@ ActivateController(GCController *controller)
 }
 
 int main(int argc, const char * argv[]) {
-//	GCExtendedGamepadSnapshot *gamepad = [[GCExtendedGamepadSnapshot alloc] init];
-//	for(;;){
-//		@autoreleasepool {
-//			[gamepad snapshotDataFast];
-//		}
-//	}
-	
 	@autoreleasepool {
 		NSArray *controllers = [CCController controllers];
 		NSLog(@"%d controllers found.", (int)controllers.count);

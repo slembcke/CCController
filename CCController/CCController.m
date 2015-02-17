@@ -9,7 +9,10 @@ const float DeadZonePercent = 0.2f;
 
 @implementation CCController {
 	GCExtendedGamepadSnapShotDataV100 _snapshot;
-	GCExtendedGamepadSnapshot *_gamepad;
+	
+	// Gamepad ivars are lazy and are only created when requested.
+	GCGamepadSnapshot *_gamepad;
+	GCExtendedGamepadSnapshot *_extendedGamepad;
 	
 	CFIndex _lThumbXUsageID;
 	CFIndex _lThumbYUsageID;
@@ -55,13 +58,11 @@ static NSMutableArray *CONTROLLERS = nil;
 	}
 	
 	// Register to get callbacks when gamepads are connected.
-	NSArray *matches = @[
+	IOHIDManagerRegisterDeviceMatchingCallback(HID_MANAGER, ControllerConnected, NULL);
+	IOHIDManagerSetDeviceMatchingMultiple(HID_MANAGER, (__bridge CFArrayRef)@[
 		@{@(kIOHIDDeviceUsagePageKey): @(kHIDPage_GenericDesktop), @(kIOHIDDeviceUsageKey): @(kHIDUsage_GD_GamePad)},
 		@{@(kIOHIDDeviceUsagePageKey): @(kHIDPage_GenericDesktop), @(kIOHIDDeviceUsageKey): @(kHIDUsage_GD_MultiAxisController)},
-	];
-	
-	IOHIDManagerSetDeviceMatchingMultiple(HID_MANAGER, (__bridge CFArrayRef)matches);
-	IOHIDManagerRegisterDeviceMatchingCallback(HID_MANAGER, ControllerConnected, NULL);
+	]);
 	
 	// Pump the event loop to initially fill the [CCController +controllers] list.
 	// Otherwise the list would be empty, immediately followed by didConnect events.
@@ -96,9 +97,6 @@ static NSMutableArray *CONTROLLERS = nil;
 		
 		_snapshot.version = 0x0100;
 		_snapshot.size = sizeof(_snapshot);
-
-		_gamepad = [[GCExtendedGamepadSnapshot alloc] init];
-		_gamepad.snapshotData = NSDataFromGCExtendedGamepadSnapShotDataV100(&_snapshot);
 	}
 	
 	return self;
@@ -146,11 +144,6 @@ ControllerConnected(void *context, IOReturn result, void *sender, IOHIDDeviceRef
 //		NSAssert(@"CCControllerConfig.plist not found.");
 		
 		CCController *controller = [[CCController alloc] initWithDevice:device];
-		
-		NSArray *matches = @[
-			@{@(kIOHIDElementUsagePageKey): @(kHIDPage_GenericDesktop)},
-			@{@(kIOHIDElementUsagePageKey): @(kHIDPage_Button)},
-		];
 		
 		NSUInteger vid = [(__bridge NSNumber *)IOHIDDeviceGetProperty(device, CFSTR(kIOHIDVendorIDKey)) unsignedIntegerValue];
 		NSUInteger pid = [(__bridge NSNumber *)IOHIDDeviceGetProperty(device, CFSTR(kIOHIDProductIDKey)) unsignedIntegerValue];
@@ -223,8 +216,12 @@ ControllerConnected(void *context, IOReturn result, void *sender, IOHIDDeviceRef
 		SetupAxis(device, GetAxis(device, controller->_lTriggerUsageID), 0.0,  1.0, 0, 256, 0.0f);
 		SetupAxis(device, GetAxis(device, controller->_rTriggerUsageID), 0.0,  1.0, 0, 256, 0.0f);
 		
-		IOHIDDeviceSetInputValueMatchingMultiple(device, (__bridge CFArrayRef)matches);
 		IOHIDDeviceRegisterInputValueCallback(device, ControllerInput, (__bridge void *)controller);
+		IOHIDDeviceSetInputValueMatchingMultiple(device, (__bridge CFArrayRef)@[
+			@{@(kIOHIDElementUsagePageKey): @(kHIDPage_GenericDesktop)},
+			@{@(kIOHIDElementUsagePageKey): @(kHIDPage_Button)},
+		]);
+		
 		IOHIDDeviceRegisterRemovalCallback(device, ControllerDisconnected, (void *)CFBridgingRetain(controller));
 		
 		[CONTROLLERS addObject:controller];
@@ -251,66 +248,99 @@ Clamp(float value)
 	return MAX(-1.0f, MIN(value, 1.0f));
 }
 
+static GCGamepadSnapShotDataV100
+CopyExtendedSnapshotData(GCExtendedGamepadSnapShotDataV100 *snapshot)
+{
+	return (GCGamepadSnapShotDataV100){
+		.version = 0x0100,
+		.size = sizeof(GCGamepadSnapShotDataV100),
+		.dpadX = snapshot->dpadX,
+		.dpadY = snapshot->dpadY,
+		.buttonA = snapshot->buttonA,
+		.buttonB = snapshot->buttonB,
+		.buttonX = snapshot->buttonX,
+		.buttonY = snapshot->buttonY,
+		.leftShoulder = snapshot->leftShoulder,
+		.rightShoulder = snapshot->rightShoulder,
+	};
+}
+
+static void
+ControllerUpdateSnapshot(CCController *controller)
+{
+	GCExtendedGamepadSnapShotDataV100 *extendedSnapshot = &controller->_snapshot;
+	
+	// Update the gamepad snapshots if they currently exist.
+	if(controller->_extendedGamepad){
+		controller->_extendedGamepad.snapshotData = NSDataFromGCExtendedGamepadSnapShotDataV100(extendedSnapshot);
+	}
+	
+	if(controller->_gamepad){
+		GCGamepadSnapShotDataV100 snapshot = CopyExtendedSnapshotData(extendedSnapshot);
+		controller->_gamepad.snapshotData = NSDataFromGCGamepadSnapShotDataV100(&snapshot);
+	}
+}
+
 static void
 ControllerInput(void *context, IOReturn result, void *sender, IOHIDValueRef value)
 {
+	if(result != kIOReturnSuccess) return;
+	
 	@autoreleasepool {
-		if(result == kIOReturnSuccess){
-			CCController *controller = (__bridge CCController *)context;
-			GCExtendedGamepadSnapShotDataV100 *snapshot = &controller->_snapshot;
-			
-			IOHIDElementRef element = IOHIDValueGetElement(value);
-			
-			uint32_t usagePage = IOHIDElementGetUsagePage(element);
-			uint32_t usage = IOHIDElementGetUsage(element);
-			
-			CFIndex state = (int)IOHIDValueGetIntegerValue(value);
-			float analog = IOHIDValueGetScaledValue(value, kIOHIDValueScaleTypeCalibrated);
-			
-//			NSLog(@"usagePage: 0x%02X, usage 0x%02X, value: %d / %f", usagePage, usage, state, analog);
-			
-			if(usagePage == kHIDPage_Button){
-					if(usage == controller->_buttonPauseUsageID){if(state) controller.controllerPausedHandler(controller);}
-					if(usage == controller->_buttonAUsageID){snapshot->buttonA = state;}
-					if(usage == controller->_buttonBUsageID){snapshot->buttonB = state;}
-					if(usage == controller->_buttonXUsageID){snapshot->buttonX = state;}
-					if(usage == controller->_buttonYUsageID){snapshot->buttonY = state;}
-					if(usage == controller->_lShoulderUsageID){snapshot->leftShoulder = state;}
-					if(usage == controller->_rShoulderUsageID){snapshot->rightShoulder = state;}
+		CCController *controller = (__bridge CCController *)context;
+		GCExtendedGamepadSnapShotDataV100 *snapshot = &controller->_snapshot;
+		
+		IOHIDElementRef element = IOHIDValueGetElement(value);
+		
+		uint32_t usagePage = IOHIDElementGetUsagePage(element);
+		uint32_t usage = IOHIDElementGetUsage(element);
+		
+		CFIndex state = (int)IOHIDValueGetIntegerValue(value);
+		float analog = IOHIDValueGetScaledValue(value, kIOHIDValueScaleTypeCalibrated);
+		
+//		NSLog(@"usagePage: 0x%02X, usage 0x%02X, value: %d / %f", usagePage, usage, state, analog);
+		
+		if(usagePage == kHIDPage_Button){
+			if(usage == controller->_buttonPauseUsageID){if(state) controller.controllerPausedHandler(controller);}
+			if(usage == controller->_buttonAUsageID){snapshot->buttonA = state;}
+			if(usage == controller->_buttonBUsageID){snapshot->buttonB = state;}
+			if(usage == controller->_buttonXUsageID){snapshot->buttonX = state;}
+			if(usage == controller->_buttonYUsageID){snapshot->buttonY = state;}
+			if(usage == controller->_lShoulderUsageID){snapshot->leftShoulder = state;}
+			if(usage == controller->_rShoulderUsageID){snapshot->rightShoulder = state;}
+
+			if(!controller->_usesHatSwitch){
+				if(usage == controller->_dpadLUsageID){snapshot->dpadX = Clamp(snapshot->dpadX - (state ? 1.0f : -1.0f));}
+				if(usage == controller->_dpadRUsageID){snapshot->dpadX = Clamp(snapshot->dpadX + (state ? 1.0f : -1.0f));}
+				if(usage == controller->_dpadDUsageID){snapshot->dpadY = Clamp(snapshot->dpadY - (state ? 1.0f : -1.0f));}
+				if(usage == controller->_dpadUUsageID){snapshot->dpadY = Clamp(snapshot->dpadY + (state ? 1.0f : -1.0f));}
 			}
-			
-			if(usagePage == kHIDPage_GenericDesktop){
-				if(usage == controller->_lThumbXUsageID ){snapshot->leftThumbstickX  = analog;}
-				if(usage == controller->_lThumbYUsageID ){snapshot->leftThumbstickY  = analog;}
-				if(usage == controller->_rThumbXUsageID ){snapshot->rightThumbstickX = analog;}
-				if(usage == controller->_rThumbYUsageID ){snapshot->rightThumbstickY = analog;}
-				if(usage == controller->_lTriggerUsageID){snapshot->leftTrigger     = analog;}
-				if(usage == controller->_rTriggerUsageID){snapshot->rightTrigger    = analog;}
-			}
-			
-			if(controller->_usesHatSwitch){
-				if(usagePage == kHIDPage_GenericDesktop && usage == kHIDUsage_GD_Hatswitch){
-					switch(state){
-						case  0: snapshot->dpadX =  0.0; snapshot->dpadY =  1.0; break;
-						case  1: snapshot->dpadX =  1.0; snapshot->dpadY =  1.0; break;
-						case  2: snapshot->dpadX =  1.0; snapshot->dpadY =  0.0; break;
-						case  3: snapshot->dpadX =  1.0; snapshot->dpadY = -1.0; break;
-						case  4: snapshot->dpadX =  0.0; snapshot->dpadY = -1.0; break;
-						case  5: snapshot->dpadX = -1.0; snapshot->dpadY = -1.0; break;
-						case  6: snapshot->dpadX = -1.0; snapshot->dpadY =  0.0; break;
-						case  7: snapshot->dpadX = -1.0; snapshot->dpadY =  1.0; break;
-						default: snapshot->dpadX =  0.0; snapshot->dpadY =  0.0; break;
-					}
-				}
-			} else if(usagePage == kHIDPage_Button){
-					if(usage == controller->_dpadLUsageID){snapshot->dpadX = Clamp(snapshot->dpadX - (state ? 1.0f : -1.0f));}
-					if(usage == controller->_dpadRUsageID){snapshot->dpadX = Clamp(snapshot->dpadX + (state ? 1.0f : -1.0f));}
-					if(usage == controller->_dpadDUsageID){snapshot->dpadY = Clamp(snapshot->dpadY - (state ? 1.0f : -1.0f));}
-					if(usage == controller->_dpadUUsageID){snapshot->dpadY = Clamp(snapshot->dpadY + (state ? 1.0f : -1.0f));}
-			}
-			
-			controller->_gamepad.snapshotData = NSDataFromGCExtendedGamepadSnapShotDataV100(snapshot);
 		}
+		
+		if(usagePage == kHIDPage_GenericDesktop){
+			if(usage == controller->_lThumbXUsageID ){snapshot->leftThumbstickX  = analog;}
+			if(usage == controller->_lThumbYUsageID ){snapshot->leftThumbstickY  = analog;}
+			if(usage == controller->_rThumbXUsageID ){snapshot->rightThumbstickX = analog;}
+			if(usage == controller->_rThumbYUsageID ){snapshot->rightThumbstickY = analog;}
+			if(usage == controller->_lTriggerUsageID){snapshot->leftTrigger     = analog;}
+			if(usage == controller->_rTriggerUsageID){snapshot->rightTrigger    = analog;}
+			
+			if(controller->_usesHatSwitch && usage == kHIDUsage_GD_Hatswitch){
+				switch(state){
+					case  0: snapshot->dpadX =  0.0; snapshot->dpadY =  1.0; break;
+					case  1: snapshot->dpadX =  1.0; snapshot->dpadY =  1.0; break;
+					case  2: snapshot->dpadX =  1.0; snapshot->dpadY =  0.0; break;
+					case  3: snapshot->dpadX =  1.0; snapshot->dpadY = -1.0; break;
+					case  4: snapshot->dpadX =  0.0; snapshot->dpadY = -1.0; break;
+					case  5: snapshot->dpadX = -1.0; snapshot->dpadY = -1.0; break;
+					case  6: snapshot->dpadX = -1.0; snapshot->dpadY =  0.0; break;
+					case  7: snapshot->dpadX = -1.0; snapshot->dpadY =  1.0; break;
+					default: snapshot->dpadX =  0.0; snapshot->dpadY =  0.0; break;
+				}
+			}
+		}
+		
+		ControllerUpdateSnapshot(controller);
 	}
 }
 
@@ -318,15 +348,23 @@ ControllerInput(void *context, IOReturn result, void *sender, IOHIDValueRef valu
 
 -(GCGamepad *)gamepad
 {
-	// Not implemented for now.
-	return nil;
+	if(_gamepad == nil){
+		_gamepad = [[GCGamepadSnapshot alloc] init];
+		GCGamepadSnapShotDataV100 snapshot = CopyExtendedSnapshotData(&_snapshot);
+		_gamepad.snapshotData = NSDataFromGCGamepadSnapShotDataV100(&snapshot);
+	}
+	
+	return _gamepad;
 }
 
 -(GCExtendedGamepad *)extendedGamepad
 {
-	// TODO should make this weak and lazy.
-	// Then we can pump the gamepad data only when it's active.
-	return _gamepad;
+	if(_extendedGamepad == nil){
+		_extendedGamepad = [[GCExtendedGamepadSnapshot alloc] init];
+		_extendedGamepad.snapshotData = NSDataFromGCExtendedGamepadSnapShotDataV100(&_snapshot);
+	}
+	
+	return _extendedGamepad;
 }
 
 @end
