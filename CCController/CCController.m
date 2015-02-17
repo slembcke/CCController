@@ -63,7 +63,9 @@ static NSMutableArray *CONTROLLERS = nil;
 	IOHIDManagerSetDeviceMatchingMultiple(HID_MANAGER, (__bridge CFArrayRef)matches);
 	IOHIDManagerRegisterDeviceMatchingCallback(HID_MANAGER, ControllerConnected, NULL);
 	
-	// Pump the event loop to list all of the currently connected gamepads.
+	// Pump the event loop to initially fill the [CCController +controllers] list.
+	// Otherwise the list would be empty, immediately followed by didConnect events.
+	// Not really a problem, but quite how the iOS API works.
 	NSString *mode = @"CCControllerPollGamepads";
 	IOHIDManagerScheduleWithRunLoop(HID_MANAGER, CFRunLoopGetCurrent(), (__bridge CFStringRef)mode);
 	
@@ -235,8 +237,6 @@ ControllerDisconnected(void *context, IOReturn result, void *sender)
 {
 	if(result == kIOReturnSuccess){
 		CCController *controller = CFBridgingRelease((CFTypeRef)context);
-		
-		NSLog(@"%p, %p, %d", context, sender, result);
 		
 		[CONTROLLERS removeObject:controller];
 		[[NSNotificationCenter defaultCenter] postNotificationName:GCControllerDidDisconnectNotification object:controller];
