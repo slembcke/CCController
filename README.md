@@ -1,3 +1,5 @@
+IMPORTANT! It seems there is a fatal bug in [GCControllerSnapshot snapshotData] that prevents them from being used on OS X 10.11. Until it is fixed, this library can only be used on 10.9 or 10.10.
+
 # CCController
 
 I rather like Apple's GameController.framework API. It's clean, simple, and fairly complete, and (mildly) cross-platform. Unfortunately it's nearly useless on the Mac since nobody really has controllers to use with it. Most computer players use their console controllers on their computer, and using gamepad snapshots it's easy to trick GameController.framework into supporting them.
