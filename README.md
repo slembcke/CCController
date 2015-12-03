@@ -1,4 +1,4 @@
-IMPORTANT! It seems there is a fatal bug in [GCControllerSnapshot snapshotData] that prevents them from being used on OS X 10.11. Until it is fixed, this library can only be used on 10.9 or 10.10.
+IMPORTANT! It seems there is a fatal bug in [GCControllerSnapshot snapshotData] that prevents them from being used on OS X 10.11. Until Apple fixes it, this library can only be used on 10.9 or 10.10.
 
 # CCController
 
