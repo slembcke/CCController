@@ -272,12 +272,14 @@ ControllerUpdateSnapshot(CCController *controller)
 	
 	// Update the gamepad snapshots if they currently exist.
 	if(controller->_extendedGamepad){
-		controller->_extendedGamepad.snapshotData = NSDataFromGCExtendedGamepadSnapShotDataV100(extendedSnapshot);
+		NSData *data = NSDataFromGCExtendedGamepadSnapShotDataV100(extendedSnapshot);
+		if(data) controller->_extendedGamepad.snapshotData = data;
 	}
 	
 	if(controller->_gamepad){
 		GCGamepadSnapShotDataV100 snapshot = CopyExtendedSnapshotData(extendedSnapshot);
-		controller->_gamepad.snapshotData = NSDataFromGCGamepadSnapShotDataV100(&snapshot);
+		NSData *data = NSDataFromGCGamepadSnapShotDataV100(&snapshot);
+		if(data) controller->_gamepad.snapshotData = data;
 	}
 }
 
@@ -351,7 +353,8 @@ ControllerInput(void *context, IOReturn result, void *sender, IOHIDValueRef valu
 	if(_gamepad == nil){
 		_gamepad = [[GCGamepadSnapshot alloc] init];
 		GCGamepadSnapShotDataV100 snapshot = CopyExtendedSnapshotData(&_snapshot);
-		_gamepad.snapshotData = NSDataFromGCGamepadSnapShotDataV100(&snapshot);
+		NSData *data = NSDataFromGCGamepadSnapShotDataV100(&snapshot);
+		if(data) _gamepad.snapshotData = data;
 	}
 	
 	return _gamepad;
@@ -361,7 +364,8 @@ ControllerInput(void *context, IOReturn result, void *sender, IOHIDValueRef valu
 {
 	if(_extendedGamepad == nil){
 		_extendedGamepad = [[GCExtendedGamepadSnapshot alloc] init];
-		_extendedGamepad.snapshotData = NSDataFromGCExtendedGamepadSnapShotDataV100(&_snapshot);
+		NSData *data = NSDataFromGCExtendedGamepadSnapShotDataV100(&_snapshot);
+		_extendedGamepad.snapshotData = data;
 	}
 	
 	return _extendedGamepad;
